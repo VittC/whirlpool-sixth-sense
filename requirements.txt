@@ -1,3 +1,6 @@
 aioconsole>=0.3.1
 aiohttp>=3.7.2
 websockets>=8.1
+nest_asyncio>=1.5.4
+paho_mqtt>=1.6.1
+PyYAML>=6.0

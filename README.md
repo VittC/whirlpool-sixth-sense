@@ -12,4 +12,4 @@ Use this at your own risk. If, by using this software, any damage is caused to y
 
 # ADDENDUM
 
-This fork implements a poorly written bridge to a mqtt server `whirlpool2mqtt.py`. Actually it is configured to forward to a set of attributes from a Whirlpool Oven. Edit `config.yaml` to meet your requirements.
+This fork implements a poorly written bridge to a mqtt server ( `whirlpool2mqtt.py` ). Actually it is configured to forward to a set of attributes from a Whirlpool Oven. Edit `config.yaml` to meet your requirements.

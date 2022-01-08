@@ -33,22 +33,26 @@ class Ap (Appliance):
 
 class Bridge:
 
-    def __init__(self, username, password, list):
+    def __init__(self, username, password):
           
         self._username = username
         self._password = password
-        self.attr_list = list
+       
         self.val_list = []
         self.connected = False
         self.ap = None
         self._name = None
+        self._model = None
+        self._said = None
     
     def start(self,loop):
         self._queue = Queue()
         if (not self.connected):
             loop.run_until_complete(self.connect())
-            self._name = loop.run_until_complete(self.ap.fetch_name())
-        self.getattrs()
+            data = loop.run_until_complete(self.ap.fetch_nms())
+            self._name = data["name"]
+            self._model = data["model"]
+            self._said = data["said"]
             
 
     async def connect (self):
@@ -61,8 +65,10 @@ class Bridge:
         await self.ap.connect()
         self.connected = self.ap.get_online()
     
-    def getattrs (self):
-        vals = self.ap.get_attr_list(self.attr_list)
+    def getattrs (self,attr_list):
+        
+        vals = self.ap.get_attr_list(attr_list)
+        _LOGGER.info("Data loaded")
         vals["devname"]=self._name
         if (vals["devname"]==None):
             _LOGGER.warn("data not received")
@@ -70,12 +76,12 @@ class Bridge:
         self._queue.put(vals)
        
     
-    def setattr(self, loop,  attr=None, val=None, dom=None):
-        future = asyncio.run_coroutine_threadsafe(self.async_setattr(attr, val, dom), loop, timeout = 30)
+    def setattr(self, loop,  attr=None, val=None, j=None):
+        future = asyncio.run_coroutine_threadsafe(self.async_setattr(attr, val, j), loop, timeout = 30)
         try:  
             result = future.result()
         except:
-            _LOGGER.info("Last command had not been set")
+            _LOGGER.info("Last command had not been sent")
             future.cancel()
             result = False
         return result        
@@ -84,7 +90,7 @@ class Bridge:
         if (j==None):
             status = await  self.ap.send_attributes({attr: str(val)})
         else:
-            status = await self.ap.send_attributes({j})
+            status = await self.ap.send_attributes(j)
         self.getattrs()
         return status
 
@@ -94,7 +100,7 @@ class Bridge:
         self._queue.put(None)
 
     async def reload (self):
-        _LOGGER.info("reload datas")
+        #_LOGGER.info("reload datas")
         await self.ap.fetch_data()
         return True
 

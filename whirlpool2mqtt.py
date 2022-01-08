@@ -8,7 +8,9 @@ import nest_asyncio
 import yamlparser
 from bridge import Bridge
 from mqtt import Mqtt
-from dev import device
+#from dev import device
+from alldevs import devices
+import json 
 
 logging.basicConfig(level=logging.INFO)
 _LOGGER = logging.getLogger(__name__)
@@ -25,15 +27,15 @@ def mqtt_thread (mqtt_client, br, list, stop_event, sublist=None):
                 if (sub and sublist != None):
                     for s in sublist:
                         mqtt_client.subscribe (devname, s)
-                    mqtt_client.subscribe (devname, "custom")
+                    mqtt_client.subscribe (devname, "json")
                     sub = False
             br._queue.task_done()
         except Exception as e:
             _LOGGER.error("publish_thread exited with error: "+str(e))
     #_LOGGER.info("Leaving mttq loop")
 
-def whirlpool_thread(br, mloop, stop_event,s):
-        t = time.time()
+def whirlpool_thread(br, list, mloop, stop_event,s):
+        t = 0
         while not stop_event.is_set():
             try:
                 if(time.time()-t > s):
@@ -42,7 +44,7 @@ def whirlpool_thread(br, mloop, stop_event,s):
                         _a = asyncio.run_coroutine_threadsafe(br.reload(), mloop).result(timeout=s)
                     except TimeoutError:
                         _LOGGER.warning("br.reload() timed out")
-                    br.getattrs()
+                    br.getattrs(list)
             except Exception as e:
                 _LOGGER.error("whirlpool_thread exited with error: "+str(e))
         #_LOGGER.info("Leaving whirlpool loop")
@@ -56,10 +58,10 @@ def whirlpool_recv_thread (br, mloop, mqtt_client, d, stop_event):
                 devname=packet["devname"]
                 attr = str(packet["attr"])
                 val = str(packet["value"].decode("utf-8"))
-                if ( attr!="custom" and not check_range(d, attr, val)):
+                if ( attr!="json" and not check_range(d, attr, val)):
                     _LOGGER.warning("Value " + str(val) + " not in range")
-                if (attr == "custom"):
-                    j = val 
+                if (attr == "json"):
+                    j = json.loads(val) 
                     attr = None
                     val = None
                 else:
@@ -80,18 +82,18 @@ def whirlpool_recv_thread (br, mloop, mqtt_client, d, stop_event):
 def check_range(d, attr, val):  
     try: 
         if (d[str(attr)]["type"]=="char"):
-            print (str(attr)+"is of type char")
+            #print (str(attr)+"is of type char")
             for i in d[str(attr)]["options"]:
                 if (i["name"]==val):
                     return True
         else:
-            print ("value:" + val + "Range: " + d[str(attr)]["min"] + "-" + d[str(attr)]["max"])
+            #print ("value:" + val + "Range: " + d[str(attr)]["min"] + "-" + d[str(attr)]["max"])
             if (d[str(attr)]["max"]!='' and d[str(attr)]["min"]!=''):
                 return (int(val)<int(d[str(attr)]["max"]) and int(val)>int(d[str(attr)]["min"]))
             else:
                 return True
     except Exception as e:
-        _LOGGER.error("Fail with exception " + str(e))
+        _LOGGER.error("check_range failed with exception " + str(e))
         pass
     return False
 
@@ -105,21 +107,8 @@ if __name__ == "__main__":
     password = Config.get("password", None)
     polling = Config.get("polling", 30)
     channels = Config.get("channels",None)
-    list = []
-    sublist = []
-    if channels == None:
-        for d in device:
-            list.append(d["name"])
-            if d["has_command"]:
-                sublist.append(d["name"])
-    else:
-        for c in channels:
-            if (device[str(c)] != None):
-                list.append(c)
-                if (device[str(c)]["has_command"]):
-                    sublist.append(c)
-    
-    br = Bridge(username,password,list)
+   
+    br = Bridge(username,password)
     mqtt_client = Mqtt(config)
     mqtt_client.connect()
     def exit_handler(s,a):
@@ -142,11 +131,31 @@ if __name__ == "__main__":
     nest_asyncio.apply(loop)
     br.start(loop)
     
+    device = devices.get(str(br._model),None)
+    if device is None:
+        _LOGGER.error("Device configuration not found.")
+        signal.raise_signal( signal.SIGINT )
+        
+
+    list = []
+    sublist = []
+    if channels == None:
+        for d in device:
+            list.append(d["name"])
+            if d["has_command"]:
+                sublist.append(d["name"])
+    else:
+        for c in channels:
+            if (device[str(c)] != None):
+                list.append(c)
+                if (device[str(c)]["has_command"]):
+                    sublist.append(c)
+    
     t1 = threading.Thread(target=mqtt_thread, args=[mqtt_client, br, list, stop_event, sublist])
     t1.daemon = True
     t1.start()
 
-    t2 = threading.Thread(target=whirlpool_thread, args=[br, loop, stop_event, polling])
+    t2 = threading.Thread(target=whirlpool_thread, args=[br, list, loop, stop_event, polling])
     t2.daemon = True
     t2.start()
 

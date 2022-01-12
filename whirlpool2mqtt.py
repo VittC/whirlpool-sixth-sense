@@ -98,19 +98,6 @@ def check_range(d, attr, val):
     return False
 
 if __name__ == "__main__":
-    config = yamlparser.load_yaml('config.yaml')
-    Config = config.get("whirlpool", None)
-    if (Config == None):
-        raise "Config whirlpool section is null"
-        
-    username = Config.get("username", None)
-    password = Config.get("password", None)
-    polling = Config.get("polling", 30)
-    channels = Config.get("channels",None)
-   
-    br = Bridge(username,password)
-    mqtt_client = Mqtt(config)
-    mqtt_client.connect()
     def exit_handler(s,a):
        
         stop_event.set()
@@ -121,11 +108,27 @@ if __name__ == "__main__":
         t3.join()
         loop.stop()
         mqtt_client.loop_stop()
-        
-       
+
+    list = []
+    sublist = []
     signal.signal(signal.SIGINT, exit_handler)
     signal.signal(signal.SIGTERM, exit_handler)
     stop_event = threading.Event()
+    config = yamlparser.load_yaml('config.yaml')
+    Config = config.get("whirlpool", None)
+    if (Config == None):
+        _LOGGER.error("Config whirlpool section is null")
+        signal.raise_signal( signal.SIGINT )     
+    username = Config.get("username", None)
+    password = Config.get("password", None)
+    polling = Config.get("polling", 30)
+    channels = Config.get("channels",None)
+    if ((username is None) or (password is None)):
+        _LOGGER.error("Config whirlpool section is null")
+        signal.raise_signal( signal.SIGINT )
+    br = Bridge(username,password)
+    mqtt_client = Mqtt(config)
+    mqtt_client.connect()
     loop = asyncio.new_event_loop() 
     asyncio.set_event_loop(loop)
     nest_asyncio.apply(loop)
@@ -136,9 +139,6 @@ if __name__ == "__main__":
         _LOGGER.error("Device configuration not found.")
         signal.raise_signal( signal.SIGINT )
         
-
-    list = []
-    sublist = []
     if channels == None:
         for d in device:
             list.append(d["name"])
